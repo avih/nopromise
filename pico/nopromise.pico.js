@@ -29,12 +29,7 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
     }
 
     function _then(onFulfilled, onRejected) {
-        var promise2 = NoPromise(),       // create a new promise object
-
-            resolve2 = promise2.resolve,  //|
-            reject2  = promise2.reject,   //| [better minify]
-            FUNCTION = "function";        //|
-
+        var promise2 = NoPromise();       // create a new promise object
         _state ? async(promise2Resolver) : _resolvers.push(promise2Resolver);
         return promise2;
         // -- That's it --
@@ -45,8 +40,8 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
         function promise2Resolver() {
             var handler  = _state < 2 ? onFulfilled : onRejected;
 
-            if (typeof handler != FUNCTION) { // --> handler is ignored
-                (_state < 2 ? resolve2 : reject2)(_output);
+            if (typeof handler != "function") { // --> handler is ignored
+                (_state < 2 ? promise2.resolve : promise2.reject)(_output);
 
             } else {
                 // Run the relevant handler with _output as input and decide on
@@ -67,7 +62,9 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
             // called is executed, and only once. They accept one argument.
             // NoPromise doesn't need it - it behaves nicely, but others might.
             // Also, it masks handler when called back recursively.
-            function once_reject2(r){ done++ || reject2(r) };
+            function once(fn) {
+                return function(v) { done++ || fn(v) }
+            }
 
             // Treat NoPromise as generic thenable because it is, and we can.
             try {
@@ -75,22 +72,21 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
                     x = handler(_output);
 
                 if (x == promise2) {
-                    reject2(TypeError());  // Can't resolve to itself
+                    promise2.reject(TypeError());  // Can't resolve to itself
 
-                } else if ((typeof x == FUNCTION || x && typeof x == "object")
-                           && typeof (then = x.then) == FUNCTION) {
+                } else if ((typeof x == "function" || x && typeof x == "object")
+                           && typeof (then = x.then) == "function") {
                     // x is a Promise or looks like one.
                     // When x resolves - try to resolve promise2 again
                     // Unguarded it's: x.then(promise2Resolution, reject2)
-                    then.call(x, function(y){ done++ || promise2Resolution(y) },
-                                 once_reject2);
+                    then.call(x, once(promise2Resolution), once(promise2.reject));
 
                 } else {
-                    resolve2(x);
+                    promise2.resolve(x);
                 }
 
             } catch (e) {
-                once_reject2(e);
+                once(promise2.reject)(e);
             }
         }
     }  // _then
@@ -98,6 +94,21 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
 
 
 /*
+
+Minification: to get below 512 chars, the following changes have been applied:
+
+1. Variables added at `_then`, used at promise2Resolver and promise2Resolution:
+      resolve2 = promise2.resolve,
+      reject2  = promise2.reject,
+      FUNCTION = "function";
+
+2. The function `once` was removed - and unrolled as follows:
+   - Added `function once_reject2(r){ done++ || reject2(r) };`
+     and then used `once_reject2` instead of `once(promise2.reject)`.
+
+   - `once(promise2Resolution)` replaced with inline anonymous function:
+     `function(y){ done++ || promise2Resolution(y) }`.
+
 
 // Minified as module (511 bytes) - nopromise.pico.module.min.js :
 
