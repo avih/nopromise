@@ -1,8 +1,23 @@
 /* http://github.com/avih/nopromise MIT */
 (function(){
 
-var async = setTimeout,
-    FUNCTION = "function";
+var FUNCTION = "function",
+    staticNativePromise,
+    async = setTimeout;
+
+try {
+    staticNativePromise = Promise.resolve(1);
+    async = function(f) { staticNativePromise.then(f) };
+} catch (e) {}
+
+try {
+    async = setImmediate;
+} catch (e) {}
+
+try {
+    async = process.nextTick || async;
+} catch (e) {}
+
 
 function NoPromise() {
     var _state,
