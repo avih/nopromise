@@ -1,21 +1,30 @@
 /* http://github.com/avih/nopromise MIT */
 (function(){
 
+var async = setTimeout,
+    FUNCTION = "function";
+
 function NoPromise() {
-    var async = setTimeout,
-        _state,
+    var _state,
         _output,
         _resolvers = [],
         new_promise = {
-            resolve: _changeState.bind(1),
-            reject:  _changeState.bind(2),
+            resolve: _resolve,
+            reject:  _reject,
             then:    _then
         };
     return new_promise.promise = new_promise;
 
-    function _changeState(value) {
+    function _resolve(value) {
         if (!_state) {
-            _state = this;
+            _state = 1;
+            _output = value;
+            _resolvers.forEach(async);
+        }
+    }
+    function _reject(value) {
+        if (!_state) {
+            _state = 2;
             _output = value;
             _resolvers.forEach(async);
         }
@@ -29,7 +38,7 @@ function NoPromise() {
         function promise2Resolver() {
             var handler = _state < 2 ? onFulfilled : onRejected;
 
-            if (typeof handler != "function") {
+            if (typeof handler != FUNCTION) {
                 (_state < 2 ? promise2.resolve : promise2.reject)(_output);
             } else {
                 promise2Resolution(0, handler);
@@ -40,10 +49,6 @@ function NoPromise() {
             var then,
                 done = 0;
 
-            function once(fn) {
-                return function(v) { done++ || fn(v) }
-            }
-
             try {
                 if (handler)
                     x = handler(_output);
@@ -51,16 +56,17 @@ function NoPromise() {
                 if (x == promise2) {
                     promise2.reject(TypeError());
 
-                } else if ((typeof x == "function" || x && typeof x == "object")
-                           && typeof (then = x.then) == "function") {
-                    then.call(x, once(promise2Resolution), once(promise2.reject));
+                } else if ((typeof x == FUNCTION || x && typeof x == "object")
+                           && typeof (then = x.then) == FUNCTION) {
+                    then.call(x, function(y) { done++ || promise2Resolution(y) },
+                                 function(r) { done++ || promise2.reject(r)    });
 
                 } else {
                     promise2.resolve(x);
                 }
 
             } catch (e) {
-                once(promise2.reject)(e);
+                done++ || promise2.reject(e);
             }
         }
     }
