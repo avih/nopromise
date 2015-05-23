@@ -1,5 +1,7 @@
 /* http://github.com/avih/nopromise MIT */
-exports.deferred = function NoPromise() {
+(function(){
+
+function NoPromise() {
     var async = setTimeout,
         _state,
         _output,
@@ -63,3 +65,12 @@ exports.deferred = function NoPromise() {
         }
     }
 }
+
+NoPromise.deferred = NoPromise;
+try {
+  module.exports = NoPromise;
+} catch (e) {
+  this.NoPromise = NoPromise;
+}
+
+})()
