@@ -22,13 +22,13 @@ try {
 function NoPromise() {
     var _state,
         _output,
-        _resolvers = Array();
+        _resolvers = Array(),
+        _self = this;
 
-    return {
-        resolve: _resolve,
-        reject:  _reject,
-        then:    _then
-    };
+    _self.resolve = _resolve;
+    _self.reject  =  _reject;
+    _self.then    =    _then;
+    return _self;
 
     function _resolve(value) {
         if (!_state) {
@@ -46,7 +46,7 @@ function NoPromise() {
     }
 
     function _then(onFulfilled, onRejected) {
-        var promise2 = NoPromise();
+        var promise2 = new NoPromise;
         _state ? async(promise2Resolver) : _resolvers.push(promise2Resolver);
         return promise2;
 
@@ -87,7 +87,7 @@ function NoPromise() {
     }
 }
 
-NoPromise.deferred = function() { var d = NoPromise(); return d.promise = d };
+NoPromise.deferred = function() { var d = new NoPromise; return d.promise = d };
 try {
   module.exports = NoPromise;
 } catch (e) {
