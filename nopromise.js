@@ -22,7 +22,7 @@ try {
 function NoPromise() {
     var _state,
         _output,
-        _resolvers = [],
+        _resolvers = Array(),
         new_promise = {
             resolve: _resolve,
             reject:  _reject,
