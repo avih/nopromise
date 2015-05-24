@@ -22,13 +22,13 @@ try {
 function NoPromise() {
     var _state,
         _output,
-        _resolvers = Array(),
-        new_promise = {
-            resolve: _resolve,
-            reject:  _reject,
-            then:    _then
-        };
-    return new_promise.promise = new_promise;
+        _resolvers = Array();
+
+    return {
+        resolve: _resolve,
+        reject:  _reject,
+        then:    _then
+    };
 
     function _resolve(value) {
         if (!_state) {
@@ -87,7 +87,7 @@ function NoPromise() {
     }
 }
 
-NoPromise.deferred = NoPromise;
+NoPromise.deferred = function() { var d = NoPromise(); return d.promise = d };
 try {
   module.exports = NoPromise;
 } catch (e) {
