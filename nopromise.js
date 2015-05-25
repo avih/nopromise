@@ -101,9 +101,17 @@ NoPromise.prototype = {
                     if (isFirstTime)
                         x = handler(_output);
 
-                    if (x == promise2) {
-                        promise2.reject(TypeError());
+                    // This "fast-path" is barely worth its existence, since the only
+                    // "internal" knowledge it uses is that NoPromise doesn't misbehave.
+                    // Without it, we'd still need the `if (x == promise2) {...}` part.
+                    if (x instanceof NoPromise) {
+                        if (x == promise2) {
+                            promise2.reject(TypeError());
+                        } else {
+                            x.then(promise2Resolution, function(r){unpend(promise2, 2, r)});
+                        }
 
+                    // Check for generic thenable.
                     } else if ((x && typeof x == "object" || typeof x == FUNCTION)
                                && typeof (then = x.then) == FUNCTION) {
                         then.call(x, function(y) { done++ || promise2Resolution(y) },
