@@ -1,90 +1,107 @@
 /* http://github.com/avih/nopromise MIT */
 (function(){
 
-var FUNCTION = "function",
+var async = setTimeout,
     staticNativePromise,
-    async = setTimeout;
+    globalQ;
 
 try {
-    staticNativePromise = Promise.resolve(1);
+    async = this.setImmediate || async;
+    staticNativePromise = Promise.resolve();
     async = function(f) { staticNativePromise.then(f) };
-} catch (e) {}
-
-try {
-    async = setImmediate;
-} catch (e) {}
-
-try {
     async = process.nextTick || async;
 } catch (e) {}
 
 
-function NoPromise() {
-    var _state,
-        _output,
-        _resolvers = Array(),
-        _self = this;
+function deq() {
+    var f, tmp = globalQ.reverse();
+    globalQ = 0;
+    while (f = tmp.pop())
+        f();
+}
 
-    _self.resolve = _resolve;
-    _self.reject  =  _reject;
-    _self.then    =    _then;
-    return _self;
+function internalAsync(f) {
+    if (globalQ) {
+        globalQ.push(f);
+    } else {
+        globalQ = [f];
+        async(deq);
+    }
+}
 
-    function _resolve(value) {
-        if (!_state) {
-            _state = 1;
-            _output = value;
-            _resolvers.forEach(async);
+function unpend(p, state, value) {
+    if (!p._state) {
+        p._state = state;
+        p._output = value;
+
+        var f, r = p._resolvers;
+        if (r) {
+            r.reverse();
+            while (f = r.pop())
+                internalAsync(f);
         }
     }
-    function _reject(value) {
-        if (!_state) {
-            _state = 2;
-            _output = value;
-            _resolvers.forEach(async);
-        }
-    }
+}
 
-    function _then(onFulfilled, onRejected) {
-        var promise2 = new NoPromise;
-        _state ? async(promise2Resolver) : _resolvers.push(promise2Resolver);
+NoPromise.prototype = {
+    resolve: function(value) {
+        unpend(this, 1, value);
+    },
+
+    reject: function(reason) {
+        unpend(this, 2, reason);
+    },
+
+    then: function(onFulfilled, onRejected) {
+        var _self    = this,
+            promise2 = new NoPromise;
+
+        _self._state ? internalAsync(promise2Resolver)
+                     : _self._resolvers ? _self._resolvers.push(promise2Resolver)
+                                        : _self._resolvers = [promise2Resolver];
         return promise2;
 
         function promise2Resolver() {
-            var handler = _state < 2 ? onFulfilled : onRejected;
+            var isFulfilled = _self._state < 2,
+                _output     = _self._output,
+                handler     = isFulfilled ? onFulfilled : onRejected,
+                FUNCTION    = "function";
 
             if (typeof handler != FUNCTION) {
-                (_state < 2 ? promise2.resolve : promise2.reject)(_output);
+                isFulfilled ? promise2.resolve(_output) : promise2.reject(_output);
             } else {
-                promise2Resolution(0, handler);
+                promise2Resolution(0, 1);
             }
-        }
 
-        function promise2Resolution(x, handler) {
-            var then,
-                done = 0;
+            function promise2Resolution(x, firstTime) {
+                var then,
+                    done = 0;
 
-            try {
-                if (handler)
-                    x = handler(_output);
+                try {
+                    if (firstTime)
+                        x = handler(_output);
 
-                if (x == promise2) {
-                    promise2.reject(TypeError());
+                    if (x == promise2) {
+                        promise2.reject(TypeError());
 
-                } else if ((typeof x == FUNCTION || x && typeof x == "object")
-                           && typeof (then = x.then) == FUNCTION) {
-                    then.call(x, function(y) { done++ || promise2Resolution(y) },
-                                 function(r) { done++ || promise2.reject(r)    });
+                    } else if ((x && typeof x == "object" || typeof x == FUNCTION)
+                               && typeof (then = x.then) == FUNCTION) {
+                        then.call(x, function(y) { done++ || promise2Resolution(y) },
+                                     function(r) { done++ || promise2.reject(r)    });
 
-                } else {
-                    promise2.resolve(x);
+                    } else {
+                        promise2.resolve(x);
+                    }
+
+                } catch (e) {
+                    done++ || promise2.reject(e);
                 }
-
-            } catch (e) {
-                done++ || promise2.reject(e);
             }
         }
     }
+}
+
+function NoPromise() {
 }
 
 NoPromise.deferred = function() { var d = new NoPromise; return d.promise = d };
