@@ -83,12 +83,10 @@ NoPromise.prototype = {
         // Invoked asynchronously to `then` and after _self is fulfilled/rejected.
         // _self._state here is either 1 (fulfilled) or 2 (rejected).
         function promise2Resolver() {
-            var _output     = _self._output,
-                isFulfilled = _self._state < 2,
-                handler     = isFulfilled ? onFulfilled : onRejected;
+            var handler = _self._state < 2 ? onFulfilled : onRejected;
 
             if (typeof handler != FUNCTION) {
-                isFulfilled ? promise2.resolve(_output) : promise2.reject(_output);
+                unpend(promise2, _self._state, _self._output);
             } else {
                 promise2Resolution(0, 1);
             }
@@ -99,7 +97,7 @@ NoPromise.prototype = {
 
                 try {
                     if (isFirstTime)
-                        x = handler(_output);
+                        x = handler(_self._output);
 
                     // This "fast-path" is barely worth its existence, since the only
                     // "internal" knowledge it uses is that NoPromise doesn't misbehave.
@@ -115,14 +113,14 @@ NoPromise.prototype = {
                     } else if ((x && typeof x == "object" || typeof x == FUNCTION)
                                && typeof (then = x.then) == FUNCTION) {
                         then.call(x, function(y) { done++ || promise2Resolution(y) },
-                                     function(r) { done++ || promise2.reject(r)    });
+                                     function(r) { done++ || unpend(promise2, 2, r)});
 
                     } else {
-                        promise2.resolve(x);
+                        unpend(promise2, 1, x);
                     }
 
                 } catch (e) {
-                    done++ || promise2.reject(e);
+                    done++ || unpend(promise2, 2, e);
                 }
             }
         }
