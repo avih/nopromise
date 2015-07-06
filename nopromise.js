@@ -1,18 +1,21 @@
 /* http://github.com/avih/nopromise MIT */
 (function(){
 
-var async = setTimeout, // Default scheduler, IE <= 9
+var globalQ,
+    async,
     staticNativePromise,
-    globalQ,
-    FUNCTION = "function";
+    FULFILLED = 1,
+    REJECTED  = 2,
+    FUNCTION  = "function";
 
+// Try to find the fastest asynchronous scheduler for this environment:
+// setImmediate -> native Promise scheduler -> setTimeout
+async = this.setImmediate; // nodejs, IE 10+
 try {
-    // Try to find the fastest asynchronous scheduler for this environment.
-    async = this.setImmediate || async; // IE 10/11 will end up using this
     staticNativePromise = Promise.resolve();
-    async = function(f) { staticNativePromise.then(f) }; // Firefox/Chrome/Edge
-    async = process.nextTick || async; // Node.js
+    async = async || function(f) { staticNativePromise.then(f) }; // Firefox/Chrome
 } catch (e) {}
+async = async || setTimeout; // IE < 10, others
 
 
 // The invariant between internalAsync and dequeue is that if globalQ is thuthy,
@@ -59,14 +62,14 @@ function unpend(p, state, value) {
 // Other than the prototype methods, the object may also have:
 // ._state    : 1 if fulfilled, 2 if rejected (doesn't exist otherwise).
 // ._output   : value if fulfilled, reason if rejected (doesn't exist otherwise).
-// ._resolvers: array of functions (closures) for/if .then calls while pending.
+// ._resolvers: array of functions (closures) for each .then call while pending (if there were any).
 NoPromise.prototype = {
     resolve: function(value) {
-        unpend(this, 1, value);
+        unpend(this, FULFILLED, value);
     },
 
     reject: function(reason) {
-        unpend(this, 2, reason);
+        unpend(this, REJECTED, reason);
     },
 
     // Each call to `then` returns a new NoPromise object and creates a closure
@@ -81,9 +84,9 @@ NoPromise.prototype = {
         return promise2;
 
         // Invoked asynchronously to `then` and after _self is fulfilled/rejected.
-        // _self._state here is either 1 (fulfilled) or 2 (rejected).
+        // _self._state here is FULFILLED/REJECTED
         function promise2Resolver() {
-            var handler = _self._state < 2 ? onFulfilled : onRejected;
+            var handler = _self._state == FULFILLED ? onFulfilled : onRejected;
 
             if (typeof handler != FUNCTION) {
                 unpend(promise2, _self._state, _self._output);
@@ -99,28 +102,21 @@ NoPromise.prototype = {
                     if (isFirstTime)
                         x = handler(_self._output);
 
-                    // This "fast-path" is barely worth its existence, since the only
-                    // "internal" knowledge it uses is that NoPromise doesn't misbehave.
-                    // Without it, we'd still need the `if (x == promise2) {...}` part.
-                    if (x instanceof NoPromise) {
-                        if (x == promise2) {
-                            promise2.reject(TypeError());
-                        } else {
-                            x.then(promise2Resolution, function(r){unpend(promise2, 2, r)});
-                        }
+                    if (x == promise2) {
+                        unpend(promise2, REJECTED, TypeError());
 
-                    // Check for generic thenable.
+                    // Check for generic thenable... which includes NoPromise.
                     } else if ((x && typeof x == "object" || typeof x == FUNCTION)
                                && typeof (then = x.then) == FUNCTION) {
                         then.call(x, function(y) { done++ || promise2Resolution(y) },
-                                     function(r) { done++ || unpend(promise2, 2, r)});
+                                     function(r) { done++ || unpend(promise2, REJECTED, r)});
 
                     } else {
-                        unpend(promise2, 1, x);
+                        unpend(promise2, FULFILLED, x);
                     }
 
                 } catch (e) {
-                    done++ || unpend(promise2, 2, e);
+                    done++ || unpend(promise2, REJECTED, e);
                 }
             }
         }
@@ -142,5 +138,7 @@ try {
 } catch (e) {
   this.NoPromise = NoPromise;
 }
+
+"nopromise_extend"; /* placeholder for extensions */
 
 })()
