@@ -123,20 +123,45 @@ NoPromise.prototype = {
     }
 }
 
-// Nothing to do other than having the correct prototype.
-// then/resolve/reject all need a `this` object.
-function NoPromise() {
+
+// Interfaces
+
+// Legacy interface:
+//   var d = NoPromise.deferred(); setTimeout(function() { d.resolve(42); }, 100); return d.promise;
+// Modern interface:
+//   return new NoPromise(function(resolve, reject) { setTimeout(function() { resolve(42); }, 100); });
+
+// New style interface with executor
+function doExec(self, executor) {
+    executor(function(v) { unpend(self, FULFILLED, v); },
+             function(r) { unpend(self, REJECTED,  r); });
 }
 
-NoPromise.deferred = function() {
+// With old static interface - Nothing to do other than having the correct
+// prototype. then/resolve/reject all need a `this` object.
+function NoPromise(executor) {
+    executor && doExec(this, executor);
+}
+
+// Old style static CTOR using deferred() or defer()
+NoPromise.defer = NoPromise.deferred = function() {
     var d = new NoPromise;
     return d.promise = d;
 };
 
+// Static interface - resolved/rejected promise with specified value/reason
+NoPromise.resolve = function(v) {
+    return new NoPromise(function(res, rej) { res(v); });
+};
+
+NoPromise.reject  = function(r) {
+    return new NoPromise(function(res, rej) { rej(r); });
+};
+
 try {
-  module.exports = NoPromise;
+    module.exports = NoPromise;
 } catch (e) {
-  this.NoPromise = NoPromise;
+    this.NoPromise = NoPromise;
 }
 
 "nopromise_extend"; /* placeholder for extensions */
