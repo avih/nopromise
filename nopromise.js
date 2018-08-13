@@ -59,19 +59,12 @@ function unpend(p, state, value) {
     }
 }
 
-// Other than the prototype methods, the object may also have:
+// Besides 'then' (+ resolve/reject in legacy interface), the object may have:
 // ._state    : 1 if fulfilled, 2 if rejected (doesn't exist otherwise).
 // ._output   : value if fulfilled, reason if rejected (doesn't exist otherwise).
 // ._resolvers: array of functions (closures) for each .then call while pending (if there were any).
+
 NoPromise.prototype = {
-    resolve: function(value) {
-        unpend(this, FULFILLED, value);
-    },
-
-    reject: function(reason) {
-        unpend(this, REJECTED, reason);
-    },
-
     // Each call to `then` returns a new NoPromise object and creates a closure
     // which is used to resolve it after then's this is fulfilled/rejected.
     then: function(onFulfilled, onRejected) {
@@ -125,29 +118,37 @@ NoPromise.prototype = {
 
 
 // Interfaces
+// ----------
 
-// Legacy interface:
-//   var d = NoPromise.deferred(); setTimeout(function() { d.resolve(42); }, 100); return d.promise;
-// Modern interface:
+// Modern - with CTOR:
 //   return new NoPromise(function(resolve, reject) { setTimeout(function() { resolve(42); }, 100); });
-
-// New style interface with executor
-function doExec(self, executor) {
-    executor(function(v) { unpend(self, FULFILLED, v); },
-             function(r) { unpend(self, REJECTED,  r); });
-}
-
-// With old static interface - Nothing to do other than having the correct
-// prototype. then/resolve/reject all need a `this` object.
 function NoPromise(executor) {
-    executor && doExec(this, executor);
+    var self = this;
+    if (executor) {  // not used by the legacy interface
+        executor(function(v) { unpend(self, FULFILLED, v); }, // bind is slower
+                 function(r) { unpend(self, REJECTED,  r); });
+    }
 }
 
-// Old style static CTOR using deferred() or defer()
+
+// Legacy - with static CTOR (can be commented out if not used):
+//   var d = NoPromise.defer(); setTimeout(function() { d.resolve(42); }, 100); return d.promise;
+
 NoPromise.defer = NoPromise.deferred = function() {
     var d = new NoPromise;
     return d.promise = d;
 };
+
+NoPromise.prototype.resolve = function(value) {
+    unpend(this, FULFILLED, value);
+}
+
+NoPromise.prototype.reject = function(reason) {
+    unpend(this, REJECTED, reason);
+}
+
+// End of legacy interface
+
 
 // Static interface - resolved/rejected promise with specified value/reason
 NoPromise.resolve = function(v) {
@@ -158,13 +159,13 @@ NoPromise.reject  = function(r) {
     return new NoPromise(function(res, rej) { rej(r); });
 };
 
+
+// export/set-global
 try {
     module.exports = NoPromise;
 } catch (e) {
     G.NoPromise = NoPromise;
 }
-
-"nopromise_extend"; /* placeholder for extensions */
 
 })( // used to setup a global NoPromise - not when using require("nopromise")
     typeof global != "undefined" ? global :
