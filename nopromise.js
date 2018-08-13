@@ -1,6 +1,11 @@
 /* http://github.com/avih/nopromise MIT */
 (function(G){
 
+// Note: NoPromise[.prototype].resolve() are the only places where "resolve"
+// actually means "fulfill". Everywhere else, and specifically at the comments,
+// "resolved" means "not pending" - which can be either fulfilled or rejected.
+// The variable names also reflect this "resolved" == "not-pending" notion.
+
 var globalQ,
     async,
     staticNativePromise,
@@ -30,7 +35,7 @@ function dequeue() {
 }
 
 // This is used throughout the implementation as the asynchronous scheduler.
-// While satisfying the contract to invoke f asynchronously, it combines
+// While satisfying the contract to invoke f asynchronously, it batches
 // individual f's into a single group which is later iterated synchronously.
 function internalAsync(f) {
     if (globalQ) {
@@ -59,7 +64,7 @@ function unpend(p, state, value) {
     }
 }
 
-// Besides 'then' (+ resolve/reject in legacy interface), the object may have:
+// Other than the prototype methods, the object may also have:
 // ._state    : 1 if fulfilled, 2 if rejected (doesn't exist otherwise).
 // ._output   : value if fulfilled, reason if rejected (doesn't exist otherwise).
 // ._resolvers: array of functions (closures) for each .then call while pending (if there were any).
@@ -113,27 +118,114 @@ NoPromise.prototype = {
                 }
             }
         }
-    }
+    },
+
+    catch: function(onRejected) {
+        return this.then(undefined, onRejected);
+    },
+
+    // P.finaly(fn) returns a promise X, and calls fn after P resolves to T.
+    // if fn throws E: X is rejected with E.
+    // Else if fn returns a promise F: X is resolved once F is resolved:
+    //   If F is rejected with FJ: X is rejected with FJ.
+    // Else: X mirrors T [ignoring fn's retval or F's fulfillment value]
+    finally: function(onFinally) {
+        function fin_noargs() { return onFinally() }
+        var fn;
+        return this
+            .then(function(v) { fn = function() { return v } },
+                  function(r) { fn = function() { throw r } })
+            .then(fin_noargs, fin_noargs)
+            .then(function finallyOK() { return fn() });
+    },
 }
 
 
-// Interfaces
-// ----------
-
-// Modern - with CTOR:
-//   return new NoPromise(function(resolve, reject) { setTimeout(function() { resolve(42); }, 100); });
+// CTOR:
+//   return new NoPromise(function(fulfill, reject) { setTimeout(function() { fulfill(42); }, 100); });
 function NoPromise(executor) {
     var self = this;
-    if (executor) {  // not used by the legacy interface
+    if (executor) {  // not used inside 'then' nor by the legacy interface
         executor(function(v) { unpend(self, FULFILLED, v); }, // bind is slower
                  function(r) { unpend(self, REJECTED,  r); });
     }
 }
 
 
-// Legacy - with static CTOR (can be commented out if not used):
-//   var d = NoPromise.defer(); setTimeout(function() { d.resolve(42); }, 100); return d.promise;
+// Static methods
+// --------------
 
+// Returns an already fulfilled/rejected promise with specified value/reason
+NoPromise.resolve = function(v) {
+    return new NoPromise(function(ful, rej) { ful(v); });
+};
+
+NoPromise.reject  = function(r) {
+    return new NoPromise(function(ful, rej) { rej(r); });
+};
+
+// Duplicates the logic used in NoPromise to detect a generic thenable
+function is_promise(x) {
+    return ((x && typeof x == "object") || typeof x == FUNCTION)
+           && typeof x.then == FUNCTION;
+}
+
+
+// For .all and .race: we support iterators as array or array-like, and slack
+// when it comes to throwing on invalid iterators (we only try [].slice.call).
+
+// Static NoPromise.all(iter) returns a promise X.
+// If iter is empty: X fulfills synchronously to an empty array.
+// Else for the first promise in iter which rejects with J: X rejects a-sync with J.
+// Else (all fulfill): X fulfills a-sync to an array of iter's fulfilled-values
+// (non-promise values are considered already fulfilled with that value).
+NoPromise.all = function(iter) {
+    Array.isArray(iter) || (iter = [].slice.call(iter));
+    var len = iter.length;
+    if (!len)
+        return NoPromise.resolve([]);  // empty fulfills synchronously
+
+    return new NoPromise(function(allful, allrej) {
+        var rv = [], pending = 0;
+        function fulOne(i, val) { rv[i] = val; --pending || allful(rv); }
+
+        iter.forEach(function(v, i) {
+            if (is_promise(v)) {
+                pending++;
+                v.then(fulOne.bind(null, i), allrej);
+            } else {
+                rv[i] = v;
+            }
+        });
+
+        // Non empty but without promises - fulfills a-sync
+        if (!pending)
+            NoPromise.resolve(rv).then(allful);
+    });
+}
+
+// Static NoPromise.race(iter) returns a promise X:
+// If iter is empty: X never resolves.
+// Else: X resolves always a-sync to mirror the first promise in iter which resolves.
+// (non-promise values are considered already fulfilled with that value).
+NoPromise.race = function(iter) {
+    return new NoPromise(function(allful, allrej) {
+        Array.isArray(iter) || (iter = [].slice.call(iter));
+        iter.some(function(v, i) {
+            if (is_promise(v)) {
+                v.then(allful, allrej);
+            } else {
+                NoPromise.resolve(v).then(allful);
+                return true;  // continuing would end up no-op
+            }
+        });
+    });
+}
+
+
+// Legacy interface - not used by any NoPromise code, provided as legacy:
+//   var d = NoPromise.defer(); setTimeout(function() { d.resolve(42); }, 100); return d.promise;
+// d.promise is indistinguishable from a promise created as "new NoPromise(executor)"
 NoPromise.defer = NoPromise.deferred = function() {
     var d = new NoPromise;
     return d.promise = d;
@@ -146,18 +238,7 @@ NoPromise.prototype.resolve = function(value) {
 NoPromise.prototype.reject = function(reason) {
     unpend(this, REJECTED, reason);
 }
-
 // End of legacy interface
-
-
-// Static interface - resolved/rejected promise with specified value/reason
-NoPromise.resolve = function(v) {
-    return new NoPromise(function(res, rej) { res(v); });
-};
-
-NoPromise.reject  = function(r) {
-    return new NoPromise(function(res, rej) { rej(r); });
-};
 
 
 // export/set-global
