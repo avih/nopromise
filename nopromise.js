@@ -1,5 +1,5 @@
 /* http://github.com/avih/nopromise MIT */
-(function(){
+(function(G){
 
 var globalQ,
     async,
@@ -161,9 +161,11 @@ NoPromise.reject  = function(r) {
 try {
     module.exports = NoPromise;
 } catch (e) {
-    this.NoPromise = NoPromise;
+    G.NoPromise = NoPromise;
 }
 
 "nopromise_extend"; /* placeholder for extensions */
 
-})()
+})( // used to setup a global NoPromise - not when using require("nopromise")
+    typeof global != "undefined" ? global :
+    typeof window != "undefined" ? window : this)
