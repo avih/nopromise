@@ -1,34 +1,34 @@
 /* http://github.com/avih/nopromise MIT */
 exports.deferred = function NoPromise() {
-    var async = setTimeout,
-        _state,
-        _output,
-        _resolvers = [],
+    var sysAsync = setTimeout,
+        state,
+        output,
+        resolvers = [],
         new_promise = {
-            resolve: _changeState.bind(1),
-            reject:  _changeState.bind(2),
-            then:    _then
+            resolve: changeState.bind(1),
+            reject:  changeState.bind(2),
+            then:    promise1then
         };
     return new_promise.promise = new_promise;
 
-    function _changeState(value) {
-        if (!_state) {
-            _state = this;
-            _output = value;
-            _resolvers.forEach(async);
+    function changeState(value) {
+        if (!state) {
+            state = this;
+            output = value;
+            resolvers.forEach(sysAsync);
         }
     }
 
-    function _then(onFulfilled, onRejected) {
+    function promise1then(onFulfilled, onRejected) {
         var promise2 = NoPromise();
-        _state ? async(promise2Resolver) : _resolvers.push(promise2Resolver);
+        state ? sysAsync(promise2Resolver) : resolvers.push(promise2Resolver);
         return promise2;
 
         function promise2Resolver() {
-            var handler = _state < 2 ? onFulfilled : onRejected;
+            var handler = state < 2 ? onFulfilled : onRejected;
 
             if (typeof handler != "function") {
-                (_state < 2 ? promise2.resolve : promise2.reject)(_output);
+                (state < 2 ? promise2.resolve : promise2.reject)(output);
             } else {
                 promise2Resolution(0, handler);
             }
@@ -44,7 +44,7 @@ exports.deferred = function NoPromise() {
 
             try {
                 if (handler)
-                    x = handler(_output);
+                    x = handler(output);
 
                 if (x == promise2) {
                     promise2.reject(TypeError());

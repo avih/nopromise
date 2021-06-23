@@ -33,7 +33,7 @@
 //   hence resolve(v) either fulfills with v, or follows + seals the fate to v.
 
 var globalQ,
-    async,
+    sysAsync,
     staticNativePromise,
     FULFILLED = 1,
     REJECTED  = 2,
@@ -41,12 +41,12 @@ var globalQ,
 
 // Try to find the fastest asynchronous scheduler for this environment:
 // setImmediate -> native Promise scheduler -> setTimeout
-async = this.setImmediate; // nodejs, IE 10+
+sysAsync = this.setImmediate; // nodejs, IE 10+
 try {
     staticNativePromise = Promise.resolve();
-    async = async || function(f) { staticNativePromise.then(f) }; // Firefox/Chrome
+    sysAsync = sysAsync || function(f) { staticNativePromise.then(f) }; // Firefox/Chrome
 } catch (e) {}
-async = async || setTimeout; // IE < 10, others
+sysAsync = sysAsync || setTimeout; // IE < 10, others, may use minimum 4 ms
 
 
 // The invariant between internalAsync and dequeue is that if globalQ is thuthy,
@@ -68,7 +68,7 @@ function internalAsync(f) {
         globalQ.push(f);
     } else {
         globalQ = [f];
-        async(dequeue);
+        sysAsync(dequeue);
     }
 }
 

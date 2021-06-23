@@ -3,48 +3,47 @@
 exports.deferred =      // <-- remove this line if using in a browser
 
 function NoPromise() {  // returns a new promise object, doesn't need `new`
-    var async = setTimeout,  // Yes, it's configurable!
+    var sysAsync = setTimeout,  // Yes, it's configurable!
 
-        _state,             // undefined-pending, 1-fulfilled, 2-rejected
-        _output,            // value if fulfilled, reason if rejected
-        _resolvers = [],    // holds `then` resolvers while it's pending
+        state,              // undefined-pending, 1-fulfilled, 2-rejected
+        output,             // value if fulfilled, reason if rejected
+        resolvers = [],     // holds `then` resolvers while it's pending
 
         new_promise = {     // <-- A new Promise is born
-            resolve: _changeState.bind(1),  //|
-            reject:  _changeState.bind(2),  //| all methods are in fact closures
-            then:    _then                  //|
+            resolve: changeState.bind(1),  //|
+            reject:  changeState.bind(2),  //| all methods are in fact closures
+            then:    promise1then          //|
         };
 
     return new_promise.promise = new_promise;   // .promise is a customary API
     // -- We're done here --
 
     // This is both `resolve` and `reject`, depending on its `this` (1 or 2)
-    function _changeState(value) {
-        if (!_state) {
-            _state = this;
-            _output = value;
-            _resolvers.forEach(async);  // execute all pending resolvers
-            // _resolvers is not used after resolve/reject. They'll GC'ed
+    function changeState(value) {
+        if (!state) {
+            state = this;
+            output = value;
+            resolvers.forEach(sysAsync);  // execute all pending resolvers
         }
     }
 
-    function _then(onFulfilled, onRejected) {
+    function promise1then(onFulfilled, onRejected) {
         var promise2 = NoPromise();       // create a new promise object
-        _state ? async(promise2Resolver) : _resolvers.push(promise2Resolver);
+        state ? sysAsync(promise2Resolver) : resolvers.push(promise2Resolver);
         return promise2;
         // -- That's it --
 
         // Here's where the main logic is. Executes after fulfilled/rejected and
         // asynchronously to `then`, and decides the fate of promise2.
-        // _state here is either 1 (fulfilled) or 2 (rejected)
+        // state here is either 1 (fulfilled) or 2 (rejected)
         function promise2Resolver() {
-            var handler  = _state < 2 ? onFulfilled : onRejected;
+            var handler  = state < 2 ? onFulfilled : onRejected;
 
             if (typeof handler != "function") { // --> handler is ignored
-                (_state < 2 ? promise2.resolve : promise2.reject)(_output);
+                (state < 2 ? promise2.resolve : promise2.reject)(output);
 
             } else {
-                // Run the relevant handler with _output as input and decide on
+                // Run the relevant handler with `output' as input and decide on
                 // promise2 according to that, possibly asynchronously.
                 // Because it can throw, and to go through one less try/catch,
                 // we delegate this invocation to promise2Resolution.
@@ -69,7 +68,7 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
             // Treat NoPromise as generic thenable because it is, and we can.
             try {
                 if (handler)  // Only happens on first invocation
-                    x = handler(_output);
+                    x = handler(output);
 
                 if (x == promise2) {
                     promise2.reject(TypeError());  // Can't resolve to itself
@@ -89,7 +88,7 @@ function NoPromise() {  // returns a new promise object, doesn't need `new`
                 once(promise2.reject)(e);
             }
         }
-    }  // _then
+    }  // promise1then
 }  // NoPromise
 
 
