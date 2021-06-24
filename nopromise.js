@@ -155,11 +155,9 @@ NoPromise.prototype = {
         function promise2Resolver() {
             var handler = _self._state == FULFILLED ? onFulfilled : onRejected;
 
-            // no executor for promise2, so not yet sealed, but the legacy API
-            // can make it already sealed here, e.g. p2=p.then(); p2.resolve(X)
-            // So we still need to check ._sealed before settle(..) below
+            // no executor for promise2, so can't be sealed
             if (typeof handler != FUNCTION) {
-                promise2._sealed || settle(promise2, _self._state, _self._output);
+                settle(promise2, _self._state, _self._output);
             } else {
                 try {
                     resolve(promise2, handler(_self._output));
@@ -274,18 +272,11 @@ NoPromise.allSettled = function(iter) {
 // Legacy interface - not used elsewhere in NoPromise, used by the test suit (below)
 //   var d = NoPromise.defer(); setTimeout(function() { d.resolve(42); }, 100); return d.promise;
 NoPromise.defer = function() {
-    var d = new NoPromise;
-    return d.promise = d;
+    var d = {};
+    d.promise = new NoPromise(function(s, j) { d.resolve = s, d.reject = j });
+    return d;
 };
 
-NoPromise.prototype.resolve = function(value) {
-    resolve(this, value);
-}
-
-NoPromise.prototype.reject = function(reason) {
-    reject(this, reason);
-}
-// End of legacy interface
 
 // Promises/A+ Compliance Test Suite
 // https://github.com/promises-aplus/promises-tests
@@ -294,7 +285,6 @@ NoPromise.prototype.reject = function(reason) {
 NoPromise.deferred = NoPromise.defer;    // Static legacy API
 NoPromise.resolved = NoPromise.resolve;  // Static standard, optional but tested
 NoPromise.rejected = NoPromise.reject;   // Static standard, optional but tested
-// The tests also use the legacy dynamic API: prototype.resolve(v)/.reject(r)
 
 
 try {
