@@ -206,12 +206,6 @@ function NoPromise(executor) {
 }
 
 
-// detect a generic thenable - same logic as at resolve(). may throw.
-function is_thenable(x) {
-    return ((x && typeof x == "object") || typeof x == FUNCTION)
-           && typeof x.then == FUNCTION;
-}
-
 // Static methods
 // --------------
 
@@ -225,54 +219,54 @@ NoPromise.reject = function(r) {
 };
 
 
-// For .all and .race: we support iterators as array or array-like, and slack
-// when it comes to throwing on invalid iterators (we only try [].slice.call).
+// For .race, .all, .allSettled: iterator must be array or array-like.
+// non-promise iterator values are considered already fulfilled with that value.
+
+// Static NoPromise.race(iter) returns a promise X:
+// If iter is empty: X never settles.
+// Else X settles a-sync and mirrors the first promise in iter which settles.
+NoPromise.race = function(iter) {
+    return new NoPromise(function(res, rej) {
+        for (var i = 0; i < iter.length; i++)
+            NoPromise.resolve(iter[i]).then(res, rej);
+    });
+}
 
 // Static NoPromise.all(iter) returns a promise X.
 // If iter is empty: X fulfills synchronously to an empty array.
 // Else for the first promise in iter which rejects with J: X rejects a-sync with J.
 // Else (all fulfill): X fulfills a-sync to an array of iter's fulfilled-values
-// (non-promise values are considered already fulfilled with that value).
 NoPromise.all = function(iter) {
-    Array.isArray(iter) || (iter = [].slice.call(iter));
-    var len = iter.length;
-    if (!len)
-        return NoPromise.resolve([]);  // empty fulfills synchronously
+    return new NoPromise(function(res, rej) {
+        var rv = [], n = iter.length;
+        function res1(i, v) { rv[i] = v; --n || res(rv) }
 
-    return new NoPromise(function(allful, allrej) {
-        var rv = [], pending = 0;
-        function fulOne(i, val) { rv[i] = val; --pending || allful(rv); }
-
-        iter.forEach(function(v, i) {
-            if (is_thenable(v)) {
-                pending++;
-                v.then(fulOne.bind(null, i), allrej);
-            } else {
-                rv[i] = v;
-            }
-        });
-
-        // Non empty but without promises - fulfills a-sync
-        if (!pending)
-            NoPromise.resolve(rv).then(allful);
+        if (n > 0) {
+            for (var i = 0; i < n; i++)
+                NoPromise.resolve(iter[i]).then(res1.bind(null, i), rej);
+        } else {
+            res(rv);
+        }
     });
 }
 
-// Static NoPromise.race(iter) returns a promise X:
-// If iter is empty: X never settles.
-// Else: X settles always a-sync and mirrors the first promise in iter which settles.
-// (non-promise values are considered already fulfilled with that value).
-NoPromise.race = function(iter) {
-    return new NoPromise(function(allful, allrej) {
-        Array.isArray(iter) || (iter = [].slice.call(iter));
-        iter.some(function(v, i) {
-            if (is_thenable(v)) {
-                v.then(allful, allrej);
-            } else {
-                NoPromise.resolve(v).then(allful);
-                return true;  // continuing would end up no-op
-            }
-        });
+// Static NoPromise.allSettled(iter) returns a promise X.
+// If iter is empty: X fulfills synchronously to an empty array.
+// Else, after the iter elements settle, X fulfills to an array of objects,
+// each reflecting the result of an iter item as either
+// {status: "fulfilled", value: <value>} or {status: "rejected", reason: <reason>}
+NoPromise.allSettled = function(iter) {
+    return new NoPromise(function(res) {
+        var rv = [], n = iter.length;
+        function res1(i, v) { rv[i] = {status: "fulfilled", value: v}; --n || res(rv); }
+        function rej1(i, r) { rv[i] = {status: "rejected", reason: r}; --n || res(rv); }
+
+        if (n > 0) {
+            for (var i = 0; i < n; i++)
+                NoPromise.resolve(iter[i]).then(res1.bind(null, i), rej1.bind(null, i));
+        } else {
+            res(rv);
+        }
     });
 }
 
