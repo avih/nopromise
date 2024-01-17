@@ -1,0 +1,23 @@
+{
+  "name": "nopromise",
+  "version": "0.0.0",
+  "description": "Promise/A+ fully compliant, tiny and very fast",
+  "main": "nopromise.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/avih/nopromise.git"
+  },
+  "keywords": [
+    "mpv",
+    "mpv-script",
+    "promise",
+    "polyfill"
+  ],
+  "author": "Avi Halachmi",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/avih/nopromise/issues"
+  },
+  "homepage": "https://github.com/avih/nopromise#readme"
+}

@@ -41,7 +41,7 @@ var globalQ,
 
 // Try to find the fastest asynchronous scheduler for this environment:
 // setImmediate -> native Promise scheduler -> setTimeout
-sysAsync = this.setImmediate; // nodejs, IE 10+
+sysAsync = typeof setImmediate !== "undefined" && setImmediate; // nodejs, IE 10+
 try {
     staticNativePromise = Promise.resolve();
     sysAsync = sysAsync || function(f) { staticNativePromise.then(f) }; // Firefox/Chrome
